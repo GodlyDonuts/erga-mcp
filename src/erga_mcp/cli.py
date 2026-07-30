@@ -17,6 +17,16 @@ from .cover_letter import create_cover_letter_proposal, load_style_context
 from .cover_letter_settings import as_json as cover_letter_settings_as_json
 from .cover_letter_settings import update_settings as update_cover_letter_settings
 from .cron_setup import install_hermes_monitor_scripts
+from .discord_bridge import (
+    discord_status,
+    run_discord_bridge,
+    start_discord_bridge,
+    stop_discord_bridge,
+)
+from .discord_setup import (
+    collect_optional_discord,
+    configure_discord_interactive,
+)
 from .doctor import check_installation
 from .exporting import export_bundle
 from .git_evidence import (
@@ -131,6 +141,29 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="preview exact host configuration without writing it",
     )
+
+    discord_bridge = subcommands.add_parser(
+        "discord",
+        help="optionally configure and run a private Discord bridge",
+    )
+    discord_commands = discord_bridge.add_subparsers(
+        dest="discord_command",
+        required=True,
+    )
+    discord_configure = discord_commands.add_parser(
+        "configure",
+        help="choose one replaceable coding backend and configure the Discord bridge",
+    )
+    _config_argument(discord_configure)
+    discord_configure.add_argument("--project-dir", type=Path, default=Path.cwd())
+    for name, help_text in (
+        ("run", "run the configured Discord bridge in the foreground"),
+        ("start", "start the configured Discord bridge in the background"),
+        ("status", "show whether the optional Discord bridge is configured and running"),
+        ("stop", "stop the recorded background Discord bridge"),
+    ):
+        discord_command = discord_commands.add_parser(name, help=help_text)
+        _config_argument(discord_command)
 
     status = subcommands.add_parser("status", help="show local pipeline counts")
     _config_argument(status)
@@ -560,6 +593,29 @@ def main(arguments: Sequence[str] | None = None) -> int:
                     file=sys.stderr,
                 )
                 return 1
+        try:
+            if collect_optional_discord():
+                _print_json(
+                    configure_discord_interactive(
+                        config_path=args.config,
+                        default_project_dir=Path.cwd(),
+                    ).as_json()
+                )
+        except WizardCancelled as error:
+            print(str(error))
+            return 0
+        except (
+            FileNotFoundError,
+            NotADirectoryError,
+            OSError,
+            RuntimeError,
+            ValueError,
+        ) as error:
+            print(
+                f"Erga's core remains ready, but the optional Discord connection failed: {error}",
+                file=sys.stderr,
+            )
+            return 1
         return 0
     if args.command == "connect":
         hosts = (
@@ -577,6 +633,37 @@ def main(arguments: Sequence[str] | None = None) -> int:
             )
         )
         return 0
+    if args.command == "discord":
+        try:
+            if args.discord_command == "configure":
+                _print_json(
+                    configure_discord_interactive(
+                        config_path=args.config,
+                        default_project_dir=args.project_dir,
+                    ).as_json()
+                )
+                return 0
+            if args.discord_command == "run":
+                return run_discord_bridge(args.config)
+            if args.discord_command == "start":
+                _print_json(start_discord_bridge(args.config))
+            elif args.discord_command == "stop":
+                _print_json(stop_discord_bridge(args.config))
+            else:
+                _print_json(discord_status(args.config))
+            return 0
+        except WizardCancelled as error:
+            print(str(error))
+            return 130
+        except (
+            FileNotFoundError,
+            NotADirectoryError,
+            OSError,
+            RuntimeError,
+            ValueError,
+        ) as error:
+            print(f"Optional Discord bridge failed: {error}", file=sys.stderr)
+            return 1
     if args.command == "zoho" and args.zoho_command == "set-client-secret":
         secret = getpass.getpass(
             "Zoho OAuth client secret (stored only in the OS credential store): "

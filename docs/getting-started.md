@@ -87,7 +87,44 @@ When intake cannot infer a recruiting season from its URL-only input, it files t
 the neutral `unsorted` cycle rather than guessing from the current date. Callers that know the
 cycle can pass it explicitly. A successful LaTeX build is stored under the configured PDF filename.
 
-## 4. Use the local workflow
+## 4. Add the optional Discord bridge
+
+Core setup also finishes before offering Discord, and skipping it is the default. Discord needs a
+bot token and one explicit local headless coding CLI because messages arrive while no interactive
+terminal session is open. That bridge-specific choice does not become Erga's core and does not
+prevent connecting other assistants.
+
+Install the isolated runtime extra and open the bridge wizard:
+
+```bash
+uv sync --extra discord
+uv run erga discord configure \
+  --config ~/.config/erga-mcp/config.toml \
+  --project-dir /absolute/path/to/project
+```
+
+The wizard resolves the selected backend before asking for Discord credentials. Its optional
+readiness probe uses the backend's existing local login and strips common provider API-key
+environment variables. The bot token is entered through a hidden prompt and stored only in the
+operating-system credential store.
+
+Authorize a current unique Discord username such as `emperor_sai`, a stable numeric user ID, or
+several comma-separated identities. Old `name#1234` discriminator names are deliberately rejected
+with current-format guidance. In servers, requiring an `@mention` is the default.
+
+Run the bridge in the foreground while testing, then optionally use the managed background
+process:
+
+```bash
+uv run erga discord run --config ~/.config/erga-mcp/config.toml
+uv run erga discord start --config ~/.config/erga-mcp/config.toml
+uv run erga discord status --config ~/.config/erga-mcp/config.toml
+uv run erga discord stop --config ~/.config/erga-mcp/config.toml
+```
+
+See [`discord.md`](discord.md) for bot permissions, backend control, and failure isolation.
+
+## 5. Use the local workflow
 
 All state remains in the configured local SQLite database. Commands produce JSON suitable for review or scripting.
 
@@ -134,7 +171,7 @@ uv run erga zoho ingest-fixture \
   --fixture tests/fixtures/zoho_messages.json
 ```
 
-## 5. Connect Zoho Mail (read-only)
+## 6. Connect Zoho Mail (read-only)
 
 The live connector uses Zoho's **Mobile-based application** OAuth type, Authorization Code + PKCE,
 a fixed local redirect URI, and the operating system's credential store through Python `keyring`.
@@ -170,7 +207,7 @@ It requests only the read-only `ZohoMail.messages.READ`, `ZohoMail.folders.READ`
      --client-id '<client-id>'
    ```
 
-## 6. Connect Hermes through MCP
+## 7. Connect Hermes through MCP
 
 ### Plug-and-play registration
 
@@ -309,11 +346,11 @@ without retrying.
 After upgrading the server code or changing its configuration, run `/reload-mcp` in the active
 Hermes session or restart the gateway so the long-running stdio process and tool inventory refresh.
 
-## 7. Add the workflow skill
+## 8. Add the workflow skill
 
 For a personal Hermes installation, tap this repository with `hermes skills tap add Adr1an04/erga-mcp`, then install `skills/productivity/erga-mcp/SKILL.md` through the chosen skill workflow. The skill contains workflow and safety policy only; it contains no integration code or credentials.
 
-## 8. Verify
+## 9. Verify
 
 ```bash
 uv run erga status --config ~/.config/erga-mcp/config.toml

@@ -111,6 +111,20 @@ uv run erga connect --host codex --host claude-code --project-dir /path/to/proje
 This writes only project-scoped MCP entries. It does not install a host, require a host login,
 select a model, or request an API key. Use `--dry-run` to inspect the exact configuration first.
 
+Discord is another optional interface. Install its isolated runtime extra, then choose exactly
+which existing headless coding CLI should power Discord replies:
+
+```bash
+uv sync --extra discord
+uv run erga discord configure
+uv run erga discord start
+```
+
+The bridge supports the same presets plus an advanced custom argument array. It accepts current
+Discord usernames such as `emperor_sai` or stable numeric user IDs, stores the bot token only in
+the operating-system credential store, and never makes the selected backend a requirement for
+Erga's local core. See the [Discord bridge guide](docs/discord.md).
+
 ### Add evidence and a draft application
 
 ```bash
@@ -199,6 +213,7 @@ tests/                synthetic unit and MCP integration tests
 
 - [`docs/getting-started.md`](docs/getting-started.md) — full setup.
 - [`docs/mcp-clients.md`](docs/mcp-clients.md) — standard stdio and loopback HTTP setup for non-Hermes MCP clients.
+- [`docs/discord.md`](docs/discord.md) — optional private Discord bridge.
 - [`docs/security.md`](docs/security.md) — permissions and safety details.
 - [`docs/FUTURE.md`](docs/FUTURE.md) — ideas for later.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — how to run checks and contribute.
