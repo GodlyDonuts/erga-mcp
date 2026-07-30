@@ -43,6 +43,28 @@ Pass `--style /absolute/path/to/preferred-resume.pdf` only when intentionally ov
 recommended one-page style. Importing an updated master deactivates prior master-résumé evidence,
 leaving exactly one current master approved.
 
+## 3. Add optional coding hosts
+
+Core setup finishes before asking about coding assistants. The default is to skip connections.
+Select zero, one, or several hosts; each is only another interface to the same Erga state:
+
+```bash
+# Interactive arrow-key multi-select.
+uv run erga connect --config ~/.config/erga-mcp/config.toml
+
+# Repeat --host to configure several project-scoped clients.
+uv run erga connect \
+  --config ~/.config/erga-mcp/config.toml \
+  --project-dir /absolute/path/to/project \
+  --host codex \
+  --host gemini-cli
+```
+
+Supported presets are `codex`, `claude-code`, `opencode`, `opencode-v2`, `gemini-cli`, `cursor`,
+`github-copilot`, and `generic-mcp`. Erga does not install, authenticate, or verify a subscription
+for any host. A missing executable is reported as informational connection metadata and never
+changes core readiness. Preview exact changes with `--dry-run`.
+
 Job-link intake needs a local LaTeX résumé template and an output directory. Configure them before
 connecting an agent; neither path is committed to the repository:
 
@@ -65,7 +87,7 @@ When intake cannot infer a recruiting season from its URL-only input, it files t
 the neutral `unsorted` cycle rather than guessing from the current date. Callers that know the
 cycle can pass it explicitly. A successful LaTeX build is stored under the configured PDF filename.
 
-## 3. Use the local workflow
+## 4. Use the local workflow
 
 All state remains in the configured local SQLite database. Commands produce JSON suitable for review or scripting.
 
@@ -112,7 +134,7 @@ uv run erga zoho ingest-fixture \
   --fixture tests/fixtures/zoho_messages.json
 ```
 
-## 4. Connect Zoho Mail (read-only)
+## 5. Connect Zoho Mail (read-only)
 
 The live connector uses Zoho's **Mobile-based application** OAuth type, Authorization Code + PKCE,
 a fixed local redirect URI, and the operating system's credential store through Python `keyring`.
@@ -148,7 +170,7 @@ It requests only the read-only `ZohoMail.messages.READ`, `ZohoMail.folders.READ`
      --client-id '<client-id>'
    ```
 
-## 5. Connect Hermes through MCP
+## 6. Connect Hermes through MCP
 
 ### Plug-and-play registration
 
@@ -287,11 +309,11 @@ without retrying.
 After upgrading the server code or changing its configuration, run `/reload-mcp` in the active
 Hermes session or restart the gateway so the long-running stdio process and tool inventory refresh.
 
-## 6. Add the workflow skill
+## 7. Add the workflow skill
 
 For a personal Hermes installation, tap this repository with `hermes skills tap add Adr1an04/erga-mcp`, then install `skills/productivity/erga-mcp/SKILL.md` through the chosen skill workflow. The skill contains workflow and safety policy only; it contains no integration code or credentials.
 
-## 7. Verify
+## 8. Verify
 
 ```bash
 uv run erga status --config ~/.config/erga-mcp/config.toml

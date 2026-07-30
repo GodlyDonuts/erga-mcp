@@ -8,6 +8,7 @@ import sys
 from collections.abc import Sequence
 from dataclasses import asdict
 from pathlib import Path
+from typing import cast
 from urllib.parse import urlsplit, urlunsplit
 
 from .config import DEFAULT_CONFIG, load_config
@@ -26,6 +27,13 @@ from .git_evidence import (
     synthesize_diff_research,
     synthesize_project_research,
     validate_worktree,
+)
+from .host_connections import (
+    SUPPORTED_HOSTS,
+    HostName,
+    collect_connection_workspace,
+    collect_optional_hosts,
+    configure_hosts,
 )
 from .integrations.mail_provider import build_mail_provider
 from .integrations.obsidian import import_markdown_evidence
@@ -102,6 +110,26 @@ def _parser() -> argparse.ArgumentParser:
         "--dry-run",
         action="store_true",
         help="collect and review choices without changing local state",
+    )
+
+    connect_host = subcommands.add_parser(
+        "connect",
+        help="optionally connect zero, one, or multiple MCP coding hosts to Erga",
+    )
+    _config_argument(connect_host)
+    connect_host.add_argument(
+        "--host",
+        action="append",
+        choices=SUPPORTED_HOSTS,
+        default=[],
+        help="host to connect; repeat for multiple hosts, or omit for the arrow-key picker",
+    )
+    connect_host.add_argument("--project-dir", type=Path, default=Path.cwd())
+    connect_host.add_argument("--server-command", type=Path)
+    connect_host.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="preview exact host configuration without writing it",
     )
 
     status = subcommands.add_parser("status", help="show local pipeline counts")
@@ -511,6 +539,43 @@ def main(arguments: Sequence[str] | None = None) -> int:
             print(f"Setup could not continue: {error}", file=sys.stderr)
             return 1
         print(render_core_setup_report(report))
+        optional_hosts = collect_optional_hosts()
+        if optional_hosts:
+            try:
+                connection_workspace = collect_connection_workspace(default=Path.cwd())
+                _print_json(
+                    configure_hosts(
+                        optional_hosts,
+                        project_dir=connection_workspace,
+                        config_path=args.config,
+                        write=True,
+                    )
+                )
+            except RuntimeError as error:
+                print(str(error))
+                return 0
+            except (FileNotFoundError, NotADirectoryError, OSError, ValueError) as error:
+                print(
+                    f"Erga's core remains ready, but the optional host connection failed: {error}",
+                    file=sys.stderr,
+                )
+                return 1
+        return 0
+    if args.command == "connect":
+        hosts = (
+            tuple(cast(HostName, host) for host in args.host)
+            if args.host
+            else collect_optional_hosts(ask_to_connect=False)
+        )
+        _print_json(
+            configure_hosts(
+                hosts,
+                project_dir=args.project_dir,
+                config_path=args.config,
+                server_command=args.server_command,
+                write=not args.dry_run,
+            )
+        )
         return 0
     if args.command == "zoho" and args.zoho_command == "set-client-secret":
         secret = getpass.getpass(

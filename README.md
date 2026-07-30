@@ -98,6 +98,19 @@ The configuration contains paths and feature settings, never credentials. Use
 `erga init` remains available as a low-level non-interactive initializer for advanced and scripted
 installations.
 
+After core setup, optionally connect any number of coding assistants:
+
+```bash
+# Arrow-key multi-select; selecting nothing is valid.
+uv run erga connect
+
+# Or configure explicit hosts without an interactive picker.
+uv run erga connect --host codex --host claude-code --project-dir /path/to/project
+```
+
+This writes only project-scoped MCP entries. It does not install a host, require a host login,
+select a model, or request an API key. Use `--dry-run` to inspect the exact configuration first.
+
 ### Add evidence and a draft application
 
 ```bash
@@ -127,9 +140,11 @@ uv run erga applications list
 For résumé setup, mail connectors, job-link routing, and scheduled private alerts, continue with
 the [complete getting-started guide](docs/getting-started.md).
 
-## MCP and Hermes
+## Optional MCP hosts and Hermes
 
-Install the local MCP server runtime, then register the local stdio server:
+The `erga connect` command supports Codex, Claude Code, OpenCode, OpenCode V2, Gemini CLI, Cursor,
+GitHub Copilot CLI, and other clients that use standard `.mcp.json`. Manual registration and Hermes
+remain supported:
 
 ```bash
 uv sync

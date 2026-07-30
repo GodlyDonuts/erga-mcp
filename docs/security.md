@@ -33,6 +33,18 @@ The wizard configures no coding-assistant account, Discord bot, mail account, cr
 service. Those are separate opt-in connections and their failure cannot invalidate core local
 state.
 
+## Optional coding-host connections
+
+`erga connect` writes only an Erga stdio MCP entry under the project workspace the user selects.
+It preserves unrelated host settings, reuses identical shared `.mcp.json` entries, refuses to
+overwrite a differing server entry, and rejects symlinked or competing-precedence configuration
+targets. `--dry-run` renders exact content without writing.
+
+Host installation and authentication remain the host's responsibility. Erga neither invokes a
+model nor requests a host subscription, model API key, or provider credential while connecting.
+Generated entries contain the local Erga configuration path, so users should review them before
+committing project host files to version control.
+
 ## Local MCP trust boundary
 
 The default MCP server is a local **stdio** process. It is not a security sandbox: it runs with the permissions of the client that starts it. Review the complete executable command, arguments, environment variables, and absolute paths before enabling it.
