@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import keyring
+from keyring.errors import KeyringError, PasswordDeleteError
 
 from .config import load_config
 from .discord_backends import (
@@ -79,6 +80,19 @@ def read_discord_token(config_path: Path) -> str:
             "Discord bot token is not configured; run `erga discord configure` first"
         )
     return token
+
+
+def delete_discord_token(config_path: Path) -> bool:
+    """Delete this Erga configuration's Discord token from the OS credential store."""
+    try:
+        keyring.delete_password(_TOKEN_SERVICE, _token_account(config_path))
+    except PasswordDeleteError:
+        return False
+    except KeyringError as error:
+        raise RuntimeError(
+            "could not remove the Discord token from the credential store"
+        ) from error
+    return True
 
 
 def _validate_settings(settings: DiscordBridgeSettings) -> None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -14,6 +15,8 @@ from typing import Literal, cast
 
 import questionary
 from questionary import Choice
+
+from .private_files import restrict_private_file
 
 HostName = Literal[
     "codex",
@@ -99,6 +102,7 @@ HOST_ADAPTERS: dict[HostName, HostAdapter] = {
 SUPPORTED_HOSTS: tuple[HostName, ...] = tuple(HOST_ADAPTERS)
 DEFAULT_SERVER_NAME = "erga-mcp"
 DEFAULT_TOOL_PROFILE = "career"
+_CONNECTIONS_NAME = "host-connections.json"
 
 
 @dataclass(frozen=True)
@@ -120,6 +124,22 @@ class HostConnectionResult:
     written: bool
     already_configured: bool
     model_api_required: bool = False
+
+
+@dataclass(frozen=True)
+class HostConnectionRecord:
+    host: HostName
+    project_dir: str
+    target_path: str
+    server_name: str = DEFAULT_SERVER_NAME
+
+
+@dataclass(frozen=True)
+class HostRemovalResult:
+    host: HostName
+    target_path: str
+    removed: bool
+    reason: str
 
 
 def host_adapter(host: HostName) -> HostAdapter:
@@ -351,6 +371,170 @@ def _atomic_write(path: Path, text: str) -> None:
         temporary_path.unlink(missing_ok=True)
 
 
+def connection_registry_path(config_path: Path) -> Path:
+    return config_path.expanduser().absolute().parent / _CONNECTIONS_NAME
+
+
+def load_connection_registry(config_path: Path) -> tuple[HostConnectionRecord, ...]:
+    path = connection_registry_path(config_path)
+    if not path.is_file():
+        return ()
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, list):
+        raise ValueError("Erga host connection registry must contain a JSON list")
+    records: list[HostConnectionRecord] = []
+    for value in payload:
+        if not isinstance(value, dict):
+            raise ValueError("Erga host connection registry contains an invalid record")
+        host = cast(HostName, str(value["host"]))
+        host_adapter(host)
+        records.append(
+            HostConnectionRecord(
+                host=host,
+                project_dir=str(value["project_dir"]),
+                target_path=str(value["target_path"]),
+                server_name=str(value.get("server_name", DEFAULT_SERVER_NAME)),
+            )
+        )
+    return tuple(records)
+
+
+def _register_connection(
+    configuration: HostConfiguration,
+    *,
+    config_path: Path,
+    project_dir: Path,
+) -> None:
+    path = connection_registry_path(config_path)
+    records = list(load_connection_registry(config_path))
+    record = HostConnectionRecord(
+        host=configuration.host,
+        project_dir=str(project_dir.expanduser().absolute()),
+        target_path=str(configuration.target_path),
+        server_name=configuration.server_name,
+    )
+    records = [
+        item
+        for item in records
+        if not (
+            item.host == record.host
+            and item.target_path == record.target_path
+            and item.server_name == record.server_name
+        )
+    ]
+    records.append(record)
+    _atomic_write(
+        path, json.dumps([asdict(item) for item in records], indent=2, sort_keys=True) + "\n"
+    )
+    restrict_private_file(path)
+
+
+def _server_config_path(server: object, configuration_format: HostFormat) -> str | None:
+    if not isinstance(server, dict):
+        return None
+    environment_name = (
+        "environment" if configuration_format in {"opencode", "opencode-v2"} else "env"
+    )
+    environment = server.get(environment_name, {})
+    if not isinstance(environment, dict):
+        return None
+    value = environment.get("ERGA_MCP_CONFIG")
+    return str(value) if value is not None else None
+
+
+def _remove_json_server(
+    *,
+    content: str,
+    configuration_format: HostFormat,
+    server_name: str,
+) -> str:
+    document = json.loads(content)
+    if not isinstance(document, dict):
+        raise ValueError("host configuration must contain a JSON object")
+    if configuration_format == "mcp-servers":
+        servers = document.get("mcpServers")
+    else:
+        mcp = document.get("mcp")
+        if not isinstance(mcp, dict):
+            raise ValueError("OpenCode configuration has no MCP object")
+        servers = mcp.get("servers") if configuration_format == "opencode-v2" else mcp
+    if not isinstance(servers, dict):
+        raise ValueError("host configuration has no MCP server object")
+    servers.pop(server_name, None)
+    return json.dumps(document, indent=2, sort_keys=True) + "\n"
+
+
+def _remove_codex_server(content: str, server_name: str) -> str:
+    escaped = re.escape(server_name)
+    key = rf'(?:"{escaped}"|\'{escaped}\'|{escaped})'
+    section = re.compile(rf"(?m)^\[mcp_servers\.{key}(?:\.[^\]]+)?\]\s*$")
+    all_sections = re.compile(r"(?m)^\[[^\n]+\]\s*$")
+    matches = list(section.finditer(content))
+    if not matches:
+        raise ValueError("Codex server exists in an unsupported inline TOML form")
+    ranges: list[tuple[int, int]] = []
+    for match in matches:
+        following = all_sections.search(content, match.end())
+        ranges.append((match.start(), following.start() if following else len(content)))
+    rendered = content
+    for start, end in reversed(ranges):
+        rendered = rendered[:start] + rendered[end:]
+    marker = "# Added by `erga connect`; project-local and optional.\n"
+    rendered = rendered.replace(marker, "", 1)
+    tomllib.loads(rendered)
+    return rendered
+
+
+def remove_host_connection(
+    record: HostConnectionRecord,
+    *,
+    config_path: Path,
+) -> HostRemovalResult:
+    """Remove only the recorded Erga server entry from one shared host file."""
+    adapter = host_adapter(record.host)
+    project_dir = Path(record.project_dir).expanduser().absolute()
+    expected_target = project_dir / adapter.project_target
+    target = Path(record.target_path).expanduser().absolute()
+    if target != expected_target:
+        raise ValueError(f"recorded host target is outside its adapter path: {target}")
+    if target.is_symlink():
+        raise ValueError(f"refusing to modify a symlinked host configuration: {target}")
+    if not target.is_file():
+        return HostRemovalResult(record.host, str(target), False, "configuration is absent")
+    content = target.read_text(encoding="utf-8")
+    configuration = HostConfiguration(
+        host=record.host,
+        format=adapter.format,
+        target_path=target,
+        server_name=record.server_name,
+        tool_profile=DEFAULT_TOOL_PROFILE,
+        content=content,
+    )
+    server = _server_from_content(configuration, content)
+    if server is None:
+        return HostRemovalResult(record.host, str(target), False, "Erga entry is absent")
+    configured_path = _server_config_path(server, adapter.format)
+    expected_config = str(config_path.expanduser().absolute())
+    if configured_path != expected_config:
+        return HostRemovalResult(
+            record.host,
+            str(target),
+            False,
+            "entry belongs to a different Erga configuration",
+        )
+    rendered = (
+        _remove_codex_server(content, record.server_name)
+        if adapter.format == "codex"
+        else _remove_json_server(
+            content=content,
+            configuration_format=adapter.format,
+            server_name=record.server_name,
+        )
+    )
+    _atomic_write(target, rendered)
+    return HostRemovalResult(record.host, str(target), True, "Erga entry removed")
+
+
 def _validate_target(configuration: HostConfiguration) -> None:
     project_dir = configuration.target_path
     for _part in Path(host_adapter(configuration.host).project_target).parts:
@@ -436,7 +620,13 @@ def configure_hosts(
             server_command=resolved_server,
         )
         if write:
-            results.append(asdict(ensure_host_configuration(configuration)))
+            result = ensure_host_configuration(configuration)
+            _register_connection(
+                configuration,
+                config_path=config_path,
+                project_dir=project_dir,
+            )
+            results.append(asdict(result))
         else:
             adapter = host_adapter(host)
             results.append(

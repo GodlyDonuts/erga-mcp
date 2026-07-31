@@ -82,6 +82,12 @@ from .setup_wizard import (
     write_core_setup_plan,
 )
 from .store import ErgaStore
+from .uninstall import (
+    apply_uninstall,
+    build_uninstall_plan,
+    confirmation_phrase,
+    render_uninstall_plan,
+)
 from .zoho_oauth import (
     connect,
     read_client_secret,
@@ -120,6 +126,29 @@ def _parser() -> argparse.ArgumentParser:
         "--dry-run",
         action="store_true",
         help="collect and review choices without changing local state",
+    )
+
+    uninstall = subcommands.add_parser(
+        "uninstall",
+        help="remove Erga-owned state, credentials, bridges, and recorded MCP connections",
+    )
+    _config_argument(uninstall)
+    uninstall.add_argument(
+        "--project-dir",
+        type=Path,
+        action="append",
+        default=[],
+        help="additional workspace whose shared MCP config should have only Erga removed",
+    )
+    uninstall.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="print the complete bounded deletion plan without changing anything",
+    )
+    uninstall.add_argument(
+        "--yes",
+        action="store_true",
+        help="apply the displayed plan without typing the confirmation phrase",
     )
 
     connect_host = subcommands.add_parser(
@@ -552,6 +581,29 @@ def _render_application_notes(application: Application, package_dir: Path | None
 
 def main(arguments: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(arguments)
+    if args.command == "uninstall":
+        plan = build_uninstall_plan(
+            args.config,
+            project_dirs=tuple(args.project_dir),
+        )
+        if args.dry_run:
+            _print_json(plan.as_json())
+            return 0
+        print(render_uninstall_plan(plan))
+        if not args.yes:
+            try:
+                response = input(f"\nType {confirmation_phrase()} to continue: ")
+            except EOFError:
+                response = ""
+            if response != confirmation_phrase():
+                print("Erga uninstall cancelled; nothing was deleted.")
+                return 130
+        try:
+            _print_json(apply_uninstall(plan))
+        except (OSError, RuntimeError, ValueError) as error:
+            print(f"Erga uninstall could not finish: {error}", file=sys.stderr)
+            return 1
+        return 0
     if args.command == "init":
         return _initialize(args.config)
     if args.command == "setup":

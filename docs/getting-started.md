@@ -358,6 +358,28 @@ uv run ruff check .
 uv run python -m unittest discover -v
 ```
 
+## Remove Erga
+
+Preview every Erga-owned path, credential, process, and recorded MCP connection that would be
+removed:
+
+```bash
+uv run erga uninstall --dry-run
+```
+
+Then run `uv run erga uninstall`. Erga prints the same bounded inventory and requires the exact
+`DELETE ERGA` confirmation phrase. Use `--yes` only for deliberate non-interactive cleanup. Pass
+`--project-dir /path/to/workspace` again for an older project connection created before Erga began
+recording connection locations.
+
+Uninstall stops only a verified Erga Discord process; deletes private configuration, SQLite state,
+managed résumé copies, generated packages in Erga-owned output directories, optional Obsidian
+projection files, Erga keychain entries, optional Hermes monitor files, and legacy `.erga`/platform
+data locations; and removes only Erga's server entry from shared client configuration. It never
+deletes the original résumé files you imported, an AI client's own login, the source checkout,
+`.venv`, or uv's shared package cache. Remove the checkout separately with your normal file manager
+after the command exits if you no longer want the code itself.
+
 ## Deliberately bounded adapters
 
 - **Zoho live access:** Authorization Code + PKCE with read-only scopes and bounded metadata polling. It cannot modify mail.
