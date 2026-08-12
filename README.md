@@ -239,6 +239,12 @@ Accepted requests receive one live, in-place Erga card with elapsed time and hon
 status; résumé cards become color-coded ready, review-required, or safely-stopped results when
 processing finishes. The palette follows Erga's documented 60–30–10 Ink, Orbit Violet, and
 semantic-accent system.
+
+When Erga was installed from the official Git checkout, an allowlisted Discord user can send
+`@Erga update` (or `update` in a direct message). Erga fetches only the official GitHub `main`
+branch, refuses tracked local edits, feature branches, divergent history, or a different remote,
+then fast-forwards, synchronizes the Discord runtime, and restarts the bridge. It reports when the
+checkout is already current and never overwrites local work.
 Keep the bot private and the Discord allowlist minimal; the bridge can access everything available
 to its OS account. See the [Discord bridge guide](docs/discord.md).
 
